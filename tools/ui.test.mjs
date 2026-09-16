@@ -113,6 +113,11 @@ const fakeDocument = {
     if (!byId.has(id)) byId.set(id, makeEl('#' + id));
     return byId.get(id);
   },
+  querySelector(selector) {
+    if (selector.includes('word-input')) return this.querySelectorAll('.word-input')[0] || null;
+    if (selector.startsWith('#')) return this.getElementById(selector.slice(1));
+    return null;
+  },
   querySelectorAll(selector) {
     if (selector.includes('word-input')) {          // 模拟 document.querySelectorAll('.word-input')
       const found = [];
@@ -458,13 +463,23 @@ await test('回车键在非输入框上才生效，其他键不触发', () => {
   fireDocKey('Enter');
   assert.equal(inputs[0].focused, true);
 });
-await test('本页都填满时回车只给提示，不跳格', () => {
+await test('本页全部写对后按回车 → 直接进入下一页（走「下一页」同一套排期）', async () => {
   const inputs = bodyInputs('#reciteBody');
-  for (const input of inputs) { input.value = wordFor(input); input.focused = false; }   // 全部写对
+  for (const input of inputs) { input.value = wordFor(input); input.focused = false; }
   fakeDocument.activeElement = null;
   fireDocKey('Enter');
-  assert.equal(inputs.some((input) => input.focused), false);
-  assert.ok(byId.get('notice').textContent.includes('都写对了'), byId.get('notice').textContent);
+  await wait(500);
+  const saved = lastSaved.recite;
+  assert.equal(saved.cursor, 3, '应前进到下一页');
+  assert.equal(saved.plan.length, 3, '应生成了第 3 页');
+  assert.equal(saved.groups[1].stage, 0, '第 2 组这一轮出现要记账');
+  assert.equal(saved.groups[1].nextDueSlot, 4, '下一轮应在 2 页之后（2+2=4）');
+  assert.equal(bodyInputs('#reciteBody').length, 10);
+  assert.equal(bodyInputs('#reciteBody')[0].focused, true, '光标应落在新页第一格');
+  // 回到第 2 页，保持后续用例的前置状态
+  byId.get('app').querySelector('#reciteBody').querySelector('#recitePrev').fire('click');
+  await wait(100);
+  assert.ok(bodyHtml('#reciteBody').includes('value="2"'), '应回到第 2 页');
 });
 
 function fireDocClick(target) {
@@ -560,6 +575,25 @@ await test('复习写错：移出已掌握、错误 +1、回到学习池与错�
   assert.ok(wrongHtml.includes('<span class="word">w0</span>'), '错题本应记录 w0');
   assert.ok(wrongHtml.includes('>1</b> 次'));
   assert.ok(wrongHtml.includes('连对 <b>4</b> 次'), '错一次后需要连对 3+1=4 次');
+});
+
+console.log('整页翻页（抄写）');
+await test('抄写页整页写对后回车翻页，最后一页只给提示', async () => {
+  clickNav('copy');
+  let page = lastSaved?.ui?.copyPage ?? 1;
+  for (let round = 0; round < 6; round += 1) {
+    const inputs = bodyInputs('#copyBody');
+    for (const input of inputs) { input.value = wordFor(input); input.focused = false; }
+    fakeDocument.activeElement = null;
+    fireDocKey('Enter');
+    await wait(500);
+    const next = lastSaved?.ui?.copyPage ?? 1;
+    if (next === page) break;                     // 翻不动了 = 已经是最后一页
+    page = next;
+    assert.equal(bodyInputs('#copyBody')[0].focused, true, '翻页后光标应落在新页第一格');
+  }
+  assert.equal(page, 3, '25 个词应该刚好翻到第 3 页');
+  assert.ok(byId.get('notice').textContent.includes('最后一页'), byId.get('notice').textContent);
 });
 
 console.log(`\n${passed} 通过 / ${failed} 失败`);

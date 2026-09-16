@@ -418,7 +418,7 @@ function renderCopy(root) {
         <button class="subtab ${tab === 'review' ? 'active' : ''}" data-copytab="review">复习 (${reviewCount})</button>
       </div>
     </div>
-    <p class="hint">点击输入框自动播放读音；输入后失焦会再播一次并自动比对是否相符。抄写只练手感与拼写，不改变掌握进度。<br>技巧：输入框里按 <b>回车</b> 就是判分；没有选中任何输入框时按 <b>回车</b>，会自动跳到本页第一个空着或写错的输入框。</p>
+    <p class="hint">点击输入框自动播放读音；输入后失焦会再播一次并自动比对是否相符。抄写只练手感与拼写，不改变掌握进度。<br>技巧：输入框里按 <b>回车</b> 就是判分；没有选中任何输入框时按 <b>回车</b>，会自动跳到本页第一个空着或写错的输入框；本页全部写对后再按 <b>回车</b> 就直接翻到下一页。</p>
     <div id="copyBody"></div>
   </section>`;
   root.querySelectorAll('[data-copytab]').forEach((btn) => {
@@ -575,7 +575,7 @@ function renderRecite(root) {
         <button class="subtab ${tab === 'review' ? 'active' : ''}" data-recitab="review">复习 (${reviewCount})</button>
       </div>
     </div>
-    <p class="hint">不显示俄文原文。点输入框播读音，失焦后再次播放并判分：连对 ${MASTER_BASE} 次进「已掌握」（每错一次门槛 +1，正确次数清零）。写错可点「显示答案」。<br>技巧：输入框里按 <b>回车</b> 就是判分；没有选中任何输入框时按 <b>回车</b>，会自动跳到本页第一个空着或写错的输入框。</p>
+    <p class="hint">不显示俄文原文。点输入框播读音，失焦后再次播放并判分：连对 ${MASTER_BASE} 次进「已掌握」（每错一次门槛 +1，正确次数清零）。写错可点「显示答案」。<br>技巧：输入框里按 <b>回车</b> 就是判分；没有选中任何输入框时按 <b>回车</b>，会自动跳到本页第一个空着或写错的输入框；本页全部写对后再按 <b>回车</b> 就直接翻到下一页。</p>
     <div id="reciteBody"></div>
   </section>`;
   root.querySelectorAll('[data-recitab]').forEach((btn) => {
@@ -680,12 +680,13 @@ function goNextSlot() {
     const created = generateSlot(recite, isActive, newWordsForGroups());
     if (!created) {
       notice('所有单词都已掌握，没有下一页了 🎉');
-      return;
+      return false;
     }
     recite.cursor = recite.plan.length;
   }
   save();
   render();
+  return true;
 }
 
 // ------------------------------------------------------------------ 已掌握
@@ -887,18 +888,68 @@ function inputNeedsAttention(input) {
   return !isMatch(input.value, item.word);
 }
 
-// 没有选中任何输入框时按回车：跳到本页从上到下第一个空着或写错的输入框
-function focusFirstPendingInput() {
+// 没有选中任何输入框时按回车：
+//   本页还有空着/写错的格子 -> 跳过去；本页都写对了 -> 直接翻到下一页
+function handleIdleEnter() {
   const inputs = [...document.querySelectorAll('.word-input')];
   if (!inputs.length) return;
   const target = inputs.find(inputNeedsAttention);
-  if (!target) {
-    notice('本页都写对了 👍');
+  if (target) {
+    target.focus();
+    if (typeof target.scrollIntoView === 'function') {
+      target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
     return;
   }
-  target.focus();
-  if (typeof target.scrollIntoView === 'function') {
-    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  goNextPage(inputs);
+}
+
+function focusFirstInputOfPage() {
+  const input = document.querySelector('.word-input');
+  if (!input) return;
+  input.focus();
+  if (typeof input.scrollIntoView === 'function') {
+    input.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
+}
+
+// 按池子大小翻页（抄写学习页 / 两个复习队列页用）
+function turnPage(key, poolSize, label) {
+  const total = Math.max(1, Math.ceil(poolSize / PER_PAGE));
+  const current = clamp(S.progress.ui[key], 1, total);
+  if (current >= total) {
+    notice(`${label}已经是最后一页了`);
+    return false;
+  }
+  S.progress.ui[key] = current + 1;
+  save();
+  render();
+  return true;
+}
+
+function goNextPage(inputs) {
+  let moved = false;
+  if (S.view === 'recite') {
+    if (S.progress.ui.reciteTab === 'review') {
+      moved = turnPage('reciteReviewPage', reviewPool().length, '复习队列');
+    } else {
+      // 本页都写对了，顺手把这些词记为「已提交」，再走与「下一页」按钮完全相同的排期逻辑
+      const slot = S.progress.recite.cursor;
+      const submitted = S.progress.recite.pageSubmitted[slot] || (S.progress.recite.pageSubmitted[slot] = []);
+      for (const input of inputs) {
+        const item = S.byIdx.get(Number(input.closest('.row')?.dataset.idx));
+        if (item && !submitted.includes(item.word)) submitted.push(item.word);
+      }
+      moved = goNextSlot();
+    }
+  } else if (S.view === 'copy') {
+    moved = S.progress.ui.copyTab === 'review'
+      ? turnPage('copyReviewPage', reviewPool().length, '复习队列')
+      : turnPage('copyPage', learningPool().length, '学习页');
+  }
+  if (moved) {
+    save();
+    focusFirstInputOfPage();
   }
 }
 
@@ -920,7 +971,7 @@ function bindGlobal() {
     if (ev.key !== 'Enter' || ev.altKey || ev.ctrlKey || ev.metaKey) return;
     if (isTextField(ev.target) || !isIdleFocus()) return;   // 输入框/按钮上的回车交给它们自己处理
     if (ev.preventDefault) ev.preventDefault();
-    focusFirstPendingInput();
+    handleIdleEnter();
   });
 
   document.getElementById('mainNav').addEventListener('click', (ev) => {
