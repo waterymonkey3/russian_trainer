@@ -1,0 +1,13 @@
+{
+  "name": "russian-trainer",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "本地自用的俄语学习系统（服务端为 Python 标准库，无需 npm 安装）",
+  "scripts": {
+    "test": "node tools/logic.test.mjs && node tools/assets.test.mjs && node tools/ui.test.mjs",
+    "test:logic": "node tools/logic.test.mjs",
+    "test:assets": "node tools/assets.test.mjs",
+    "test:ui": "node tools/ui.test.mjs"
+  }
+}

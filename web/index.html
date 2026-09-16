@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>俄语学习系统</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">俄语学习系统 <span class="sub" id="stats"></span></div>
+  <nav class="tabs" id="mainNav">
+    <button data-view="vocab">词汇书</button>
+    <button data-view="copy">抄写</button>
+    <button data-view="recite">默写</button>
+    <button data-view="mastered">已掌握</button>
+    <button data-view="wrong">错题本</button>
+  </nav>
+</header>
+
+<div id="notice" class="notice hidden"></div>
+<main id="app"></main>
+
+<footer class="keyboard hidden" id="keyboard">
+  <div class="kbd-head">
+    <span>俄文字母键盘（点击插入到光标处）</span>
+    <button class="btn small" id="kbdClose">收起（右下角可随时展开）</button>
+  </div>
+  <div class="kbd-keys" id="kbdKeys"></div>
+</footer>
+
+<button class="kbd-toggle" id="kbdToggle" type="button" title="展开俄文字母键盘">⌨ 展开键盘</button>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
